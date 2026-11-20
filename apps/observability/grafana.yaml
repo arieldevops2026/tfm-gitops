@@ -1,0 +1,297 @@
+# Grafana: visualiza métricas (Prometheus), trazas (Tempo) y logs (Loki).
+# La contraseña de admin NO está en este repo (es público): vive en el Secret "grafana-admin",
+# que se crea a mano:  kubectl -n observability create secret generic grafana-admin --from-literal=password=<clave>
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: observability
+data:
+  datasources.yaml: |
+    # Fuentes de datos de Grafana, creadas al arrancar (provisioning).
+    # Nota: en estos archivos "$" se escribe "$$" porque Grafana usa "$" para variables de entorno.
+    apiVersion: 1
+
+    datasources:
+      # Metricas: aqui se calculan los SLI (latencia p95, % de errores 5xx)
+      - name: Prometheus
+        type: prometheus
+        uid: prometheus
+        url: http://prometheus:9090
+        access: proxy           # Grafana consulta desde el servidor, no desde tu navegador
+        isDefault: true
+
+      # Logs
+      - name: Loki
+        type: loki
+        uid: loki
+        url: http://loki:3100
+        access: proxy
+        jsonData:
+          # De un log a su traza: el campo trace_id (structured metadata) se convierte en un enlace a Tempo
+          derivedFields:
+            - name: TraceID
+              matcherType: label
+              matcherRegex: trace_id
+              datasourceUid: tempo
+              url: "$${__value.raw}"
+
+      # Trazas
+      - name: Tempo
+        type: tempo
+        uid: tempo
+        url: http://tempo:3200
+        access: proxy
+        jsonData:
+          # De un span a sus logs en Loki: mismo servicio y mismo trace_id
+          tracesToLogsV2:
+            datasourceUid: loki
+            spanStartTimeShift: "-5m"
+            spanEndTimeShift: "5m"
+            tags:
+              - key: service.name
+                value: service_name     # en Loki los puntos se convierten en guiones bajos
+            customQuery: true
+            query: '{$${__tags}} | trace_id="$${__trace.traceId}"'
+          nodeGraph:
+            enabled: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: observability
+data:
+  dashboards.yaml: |
+    # Indica a Grafana que cargue los paneles (dashboards) JSON de una carpeta al arrancar.
+    apiVersion: 1
+
+    providers:
+      - name: tfm
+        folder: TFM
+        type: file
+        allowUiUpdates: false        # el JSON en Git es la fuente de verdad
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: observability
+data:
+  sli.json: |
+    {
+      "uid": "tfm-sli",
+      "title": "TFM - SLI por servicio y version",
+      "tags": ["tfm", "slo"],
+      "timezone": "browser",
+      "refresh": "10s",
+      "time": { "from": "now-15m", "to": "now" },
+      "schemaVersion": 39,
+      "panels": [
+        {
+          "id": 1,
+          "type": "timeseries",
+          "title": "Latencia p95 (SLO < 500 ms)",
+          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 9 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": { "thresholdsStyle": { "mode": "line+area" } },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "transparent", "value": null },
+                  { "color": "red", "value": 0.5 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "histogram_quantile(0.95, sum by (le, service_name, service_version) (rate(http_server_requests_seconds_bucket{job=\"tfm-services\"}[1m])))",
+              "legendFormat": "{{service_name}} {{service_version}}"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "timeseries",
+          "title": "Errores HTTP 5xx (SLO < 1 %)",
+          "gridPos": { "x": 12, "y": 0, "w": 12, "h": 9 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "custom": { "thresholdsStyle": { "mode": "line+area" } },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "transparent", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "100 * (sum by (service_name, service_version) (rate(http_server_requests_seconds_count{job=\"tfm-services\", status=~\"5..\"}[1m])) or 0 * sum by (service_name, service_version) (rate(http_server_requests_seconds_count{job=\"tfm-services\"}[1m]))) / sum by (service_name, service_version) (rate(http_server_requests_seconds_count{job=\"tfm-services\"}[1m]))",
+              "legendFormat": "{{service_name}} {{service_version}}"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "type": "timeseries",
+          "title": "Peticiones por encima de 500 ms",
+          "gridPos": { "x": 0, "y": 9, "w": 12, "h": 9 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "percent", "min": 0 }, "overrides": [] },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "100 * (1 - sum by (service_name, service_version) (rate(http_server_requests_seconds_bucket{job=\"tfm-services\", le=\"0.5\"}[1m])) / sum by (service_name, service_version) (rate(http_server_requests_seconds_count{job=\"tfm-services\"}[1m])))",
+              "legendFormat": "{{service_name}} {{service_version}}"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "type": "timeseries",
+          "title": "Peticiones por segundo",
+          "gridPos": { "x": 12, "y": 9, "w": 12, "h": 9 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "reqps", "min": 0 }, "overrides": [] },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "expr": "sum by (service_name, service_version) (rate(http_server_requests_seconds_count{job=\"tfm-services\"}[1m]))",
+              "legendFormat": "{{service_name}} {{service_version}}"
+            }
+          ]
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: observability
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      securityContext:
+        runAsUser: 472
+        runAsNonRoot: true
+        fsGroup: 472
+      containers:
+        - name: grafana
+          image: grafana/grafana:13.3.1
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: admin
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: password
+            - name: GF_ANALYTICS_REPORTING_ENABLED
+              value: "false"
+            - name: GF_ANALYTICS_CHECK_FOR_UPDATES
+              value: "false"
+            # Se sirve bajo /grafana para colgarlo del mismo Ingress de Traefik
+            - name: GF_SERVER_ROOT_URL
+              value: "http://192.168.56.20/grafana/"
+            - name: GF_SERVER_SERVE_FROM_SUB_PATH
+              value: "true"
+          ports:
+            - name: http
+              containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /grafana/api/health
+              port: http
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+            - name: data
+              mountPath: /var/lib/grafana
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboard-provider
+          configMap:
+            name: grafana-dashboard-provider
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: observability
+  labels:
+    app: grafana
+spec:
+  selector:
+    app: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana
+  namespace: observability
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /grafana
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  name: http
