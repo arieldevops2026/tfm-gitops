@@ -1,5 +1,5 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: ms-orders
   namespace: tfm
@@ -10,6 +10,21 @@ spec:
   selector:
     matchLabels:
       app: ms-orders
+  # Escenario B2: canary con pasos de tiempo fijos, sin análisis de SLO.
+  # Traefik reparte el tráfico entre ms-orders (estable) y ms-orders-canary (versión nueva).
+  strategy:
+    canary:
+      stableService: ms-orders
+      canaryService: ms-orders-canary
+      trafficRouting:
+        traefik:
+          weightedTraefikServiceName: ms-orders-weighted
+      steps:
+        - setWeight: 10
+        - pause: {duration: 1m}
+        - setWeight: 50
+        - pause: {duration: 1m}
+        # tras el último paso la versión nueva pasa al 100 %
   template:
     metadata:
       labels:
@@ -74,3 +89,33 @@ spec:
     - name: http
       port: 80
       targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ms-orders-canary
+  namespace: tfm
+  labels:
+    app: ms-orders
+spec:
+  selector:
+    app: ms-orders
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# Reparto de tráfico por pesos. Los pesos NO se escriben aquí: los cambia Argo Rollouts,
+# y si estuvieran en Git, Argo CD marcaría el recurso como OutOfSync.
+apiVersion: traefik.io/v1alpha1
+kind: TraefikService
+metadata:
+  name: ms-orders-weighted
+  namespace: tfm
+spec:
+  weighted:
+    services:
+      - name: ms-orders
+        port: 80
+      - name: ms-orders-canary
+        port: 80
