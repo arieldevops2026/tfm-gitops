@@ -27,6 +27,10 @@ spec:
               value: "local"
             - name: APP_ENVIRONMENT
               value: "k3s-local"
+            - name: QUARKUS_OTEL_SDK_DISABLED
+              value: "false"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.observability.svc.cluster.local:4317"
           resources:
             requests:
               cpu: 50m
