@@ -1,5 +1,5 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: ms-orders
   namespace: tfm
@@ -10,6 +10,11 @@ spec:
   selector:
     matchLabels:
       app: ms-orders
+  # B0: actualización gradual de pods, sin canary ni análisis de SLO
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   template:
     metadata:
       labels:
