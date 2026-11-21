@@ -55,7 +55,7 @@ spec:
               containerPort: 18000
           env:
             - name: APP_VERSION
-              value: "v3"
+              value: "v4"
             - name: APP_ENVIRONMENT
               value: "k3s-local"
             - name: QUARKUS_OTEL_SDK_DISABLED
