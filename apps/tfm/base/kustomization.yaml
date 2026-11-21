@@ -1,0 +1,8 @@
+# Lo común a los tres escenarios: namespace, ms-products, ms-payments y ms-orders (Deployment + Service)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - ms-products.yaml
+  - ms-payments.yaml
+  - ms-orders.yaml

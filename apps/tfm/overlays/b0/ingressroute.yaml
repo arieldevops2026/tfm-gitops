@@ -1,0 +1,15 @@
+# B0: el tráfico va directo al Service ms-orders (sin reparto por pesos)
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: ms-orders
+  namespace: tfm
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: PathPrefix(`/api/v1/orders`)
+      kind: Rule
+      services:
+        - name: ms-orders
+          port: 80

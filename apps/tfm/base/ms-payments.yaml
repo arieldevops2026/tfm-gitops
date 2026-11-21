@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ms-payments
+  namespace: tfm
+  labels:
+    app: ms-payments
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ms-payments
+  template:
+    metadata:
+      labels:
+        app: ms-payments
+    spec:
+      containers:
+        - name: ms-payments
+          image: ghcr.io/arieldevops2026/tfm-ms-payments@sha256:0c43a82e9e7f66becec0b6e23d6cbbecb54f8ff3a700416c261dfa4d67f71c95
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 18002
+          env:
+            - name: APP_VERSION
+              value: "d12b48d"
+            - name: APP_ENVIRONMENT
+              value: "k3s-local"
+            - name: QUARKUS_OTEL_SDK_DISABLED
+              value: "false"
+            - name: QUARKUS_OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.observability.svc.cluster.local:4317"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          startupProbe:
+            httpGet:
+              path: /q/health/started
+              port: http
+            periodSeconds: 2
+            failureThreshold: 15
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ms-payments
+  namespace: tfm
+  labels:
+    app: ms-payments
+spec:
+  selector:
+    app: ms-payments
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

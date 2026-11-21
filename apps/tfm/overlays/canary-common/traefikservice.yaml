@@ -1,0 +1,14 @@
+# Reparto de tráfico por pesos. Los pesos NO se escriben aquí: los cambia Argo Rollouts,
+# y si estuvieran en Git, Argo CD marcaría el recurso como OutOfSync.
+apiVersion: traefik.io/v1alpha1
+kind: TraefikService
+metadata:
+  name: ms-orders-weighted
+  namespace: tfm
+spec:
+  weighted:
+    services:
+      - name: ms-orders
+        port: 80
+      - name: ms-orders-canary
+        port: 80

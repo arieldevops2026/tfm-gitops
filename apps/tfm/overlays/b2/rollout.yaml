@@ -1,0 +1,29 @@
+# ESCENARIO B2: canary con pasos de tiempo fijos, SIN análisis de SLO.
+# Avanza aunque la versión nueva falle: es la comparación frente a B1.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: ms-orders
+  namespace: tfm
+  labels:
+    app: ms-orders
+spec:
+  replicas: 2
+  workloadRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ms-orders
+    scaleDown: never        # el Deployment ya tiene 0 réplicas en Git
+  strategy:
+    canary:
+      stableService: ms-orders
+      canaryService: ms-orders-canary
+      trafficRouting:
+        traefik:
+          weightedTraefikServiceName: ms-orders-weighted
+      steps:
+        - setWeight: 10
+        - pause: {duration: 1m}
+        - setWeight: 50
+        - pause: {duration: 1m}
+        # tras el último paso la versión nueva pasa al 100 %

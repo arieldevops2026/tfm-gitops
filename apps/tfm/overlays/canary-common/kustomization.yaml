@@ -1,0 +1,17 @@
+# Común a B1 y B2. El Deployment de ms-orders queda con 0 réplicas: solo aporta el pod template
+# y quien ejecuta los pods es el Rollout (workloadRef).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  - canary-service.yaml
+  - traefikservice.yaml
+  - ingressroute.yaml
+patches:
+  - target:
+      kind: Deployment
+      name: ms-orders
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 0

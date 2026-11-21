@@ -1,0 +1,44 @@
+# ESCENARIO B1: canary gobernado por SLO.
+# Tras cada subida de tráfico: 1 min de estabilización y un análisis (AnalysisTemplate slo-ms-orders).
+# Si el análisis falla, el Rollout aborta y el tráfico vuelve a la versión estable.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: ms-orders
+  namespace: tfm
+  labels:
+    app: ms-orders
+spec:
+  replicas: 2
+  workloadRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ms-orders
+    scaleDown: never        # el Deployment ya tiene 0 réplicas en Git
+  strategy:
+    canary:
+      stableService: ms-orders
+      canaryService: ms-orders-canary
+      trafficRouting:
+        traefik:
+          weightedTraefikServiceName: ms-orders-weighted
+      steps:
+        - setWeight: 10
+        - pause: {duration: 1m}
+        - analysis:
+            templates:
+              - templateName: slo-ms-orders
+            args:
+              - name: canary-hash
+                valueFrom:
+                  podTemplateHashValue: Latest
+        - setWeight: 50
+        - pause: {duration: 1m}
+        - analysis:
+            templates:
+              - templateName: slo-ms-orders
+            args:
+              - name: canary-hash
+                valueFrom:
+                  podTemplateHashValue: Latest
+        # tras el último análisis la versión nueva pasa al 100 %
