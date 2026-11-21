@@ -17,14 +17,14 @@ spec:
     spec:
       containers:
         - name: ms-products
-          image: tfm-ms-products:local
-          imagePullPolicy: Never
+          image: ghcr.io/arieldevops2026/tfm-ms-products@sha256:f1f658bfe2e9743ca5be461682ebee1a9a8b59a9c42ba0aaaa869ba3498a1cf7
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 18001
           env:
             - name: APP_VERSION
-              value: "local"
+              value: "df26c83"
             - name: APP_ENVIRONMENT
               value: "k3s-local"
             - name: QUARKUS_OTEL_SDK_DISABLED
