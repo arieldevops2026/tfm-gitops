@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: https://github.com/arieldevops2026/tfm-gitops.git
     targetRevision: main
-    path: apps/tfm
+    path: apps/tfm/overlays/b1
   destination:
     server: https://kubernetes.default.svc
     namespace: tfm
