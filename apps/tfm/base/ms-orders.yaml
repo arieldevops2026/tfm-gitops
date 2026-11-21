@@ -20,14 +20,14 @@ spec:
     spec:
       containers:
         - name: ms-orders
-          image: ghcr.io/arieldevops2026/tfm-ms-orders@sha256:2855764d6616d36676c79150de782d320fedf4b5768c985d4ac41dc4a7ca04d1
+          image: ghcr.io/arieldevops2026/tfm-ms-orders@sha256:513fd377575e621d6bac08ab8b0589f92e793c98822a19e954af02e26142eee3
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 18000
           env:
             - name: APP_VERSION
-              value: "184b308"
+              value: "b01c491"
             - name: APP_ENVIRONMENT
               value: "k3s-local"
             - name: QUARKUS_OTEL_SDK_DISABLED
