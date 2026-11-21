@@ -10,7 +10,9 @@ spec:
   selector:
     matchLabels:
       app: ms-orders
-  # Escenario B2: canary con pasos de tiempo fijos, sin análisis de SLO.
+  # Escenario B1: canary gobernado por SLO.
+  # Tras cada subida de tráfico: 1 min de estabilización y un análisis (AnalysisTemplate slo-ms-orders).
+  # Si el análisis falla, el Rollout aborta y el tráfico vuelve a la versión estable.
   # Traefik reparte el tráfico entre ms-orders (estable) y ms-orders-canary (versión nueva).
   strategy:
     canary:
@@ -22,9 +24,23 @@ spec:
       steps:
         - setWeight: 10
         - pause: {duration: 1m}
+        - analysis:
+            templates:
+              - templateName: slo-ms-orders
+            args:
+              - name: canary-hash
+                valueFrom:
+                  podTemplateHashValue: Latest
         - setWeight: 50
         - pause: {duration: 1m}
-        # tras el último paso la versión nueva pasa al 100 %
+        - analysis:
+            templates:
+              - templateName: slo-ms-orders
+            args:
+              - name: canary-hash
+                valueFrom:
+                  podTemplateHashValue: Latest
+        # tras el último análisis la versión nueva pasa al 100 %
   template:
     metadata:
       labels:
