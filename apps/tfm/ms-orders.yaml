@@ -55,20 +55,13 @@ spec:
               containerPort: 18000
           env:
             - name: APP_VERSION
-              value: "v5"
+              value: "v4"
             - name: APP_ENVIRONMENT
               value: "k3s-local"
             - name: QUARKUS_OTEL_SDK_DISABLED
               value: "false"
             - name: QUARKUS_OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.observability.svc.cluster.local:4317"
-            # Versión defectuosa a propósito: 30 % de las peticiones con 700 ms extra
-            - name: FAULT_MODE
-              value: "LATENCY"
-            - name: FAULT_LATENCY_MS
-              value: "700"
-            - name: FAULT_PROBABILITY
-              value: "0.3"
             - name: MS_PRODUCTS_URL
               value: "http://ms-products.tfm.svc.cluster.local/api/v1/"
             - name: MS_PAYMENTS_URL
